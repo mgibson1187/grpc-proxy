@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/transport"
 )
 
@@ -70,6 +71,18 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	if err != nil {
 		return err
 	}
+
+	// Should all metadata be proxied or only selected values?
+	// https://github.com/grpc/grpc-go/issues/1148
+	// If the former, we need to workaround a bug proxying incomingMD["user-agent"].
+	// If the latter, the values to proxy should be passed in from the caller,
+	// rather than hard-coded here.
+
+	incomingMD, ok := metadata.FromIncomingContext(clientCtx)
+	if ok && len(incomingMD["token"]) > 0 {
+		clientCtx = metadata.NewOutgoingContext(clientCtx, metadata.Pairs("token", incomingMD["token"][0]))
+	}
+
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
